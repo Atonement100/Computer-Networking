@@ -1,7 +1,22 @@
 import java.io.*;
 import java.net.*;
+import java.util.Map;
+import java.util.HashMap;
 
 public class client {
+
+    private static HashMap<String, String> errorCodes;
+    static {
+        HashMap<String, String> errorCodesTemp = new HashMap<>();
+        errorCodesTemp.put("-1", "incorrect operation command.");
+        errorCodesTemp.put("-2", "number of inputs is less than two.");
+        errorCodesTemp.put("-3", "number of inputs is more than four.");
+        errorCodesTemp.put("-4", "one or more of the inputs contain(s) non-number(s)");
+        errorCodesTemp.put("-5", "exit.");
+        errorCodes = errorCodesTemp;
+    }
+
+
     public static void main(String[] args) throws IOException{
         if (args.length != 2){
             System.err.println("Usage: java client <hostname> <port #>");
@@ -10,7 +25,7 @@ public class client {
 
         String hostname = args[0];
         int port = Integer.parseInt(args[1]);
-        
+
         try(
             Socket clientSocket = new Socket(hostname, port);
             PrintWriter toServer = new PrintWriter(clientSocket.getOutputStream(), true);
@@ -21,15 +36,21 @@ public class client {
             String serverStr, clientStr;
 
             while ((serverStr = fromServer.readLine()) != null){
-                System.out.println("Server: " + serverStr);
-                if (serverStr.equals("-5")){
-                    break;
+                if (errorCodes.containsKey(serverStr)){
+                    System.out.println("receive: " + errorCodes.get(serverStr));
+                    if (serverStr.equals("-5")){
+                        break;
+                    }
                 }
+                else{
+                    System.out.println("receive: " + serverStr);
+                }
+
 
                 clientStr = stdIn.readLine();
                 if (clientStr != null){
-                    System.out.println("Client: " + clientStr);
-                    toServer.print(clientStr);
+                    //System.out.println("Client: " + clientStr);
+                    toServer.println(clientStr);
                 }
             }
 

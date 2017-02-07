@@ -9,26 +9,32 @@ public class server {
         }
 
         int port = Integer.parseInt(args[0]);
+        boolean acceptingConnections = true;
 
-        try (
-            ServerSocket serverSocket = new ServerSocket(port);
-            Socket clientSocket = serverSocket.accept();
-            PrintWriter out = new PrintWriter(clientSocket.getOutputStream(), true);
-            BufferedReader in = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
-        ){
-            String inLine, outLine;
-            serverProtocol serverProtocol = new serverProtocol();
+        while (acceptingConnections) {
+            try (
+                    ServerSocket serverSocket = new ServerSocket(port);
+                    Socket clientSocket = serverSocket.accept();
+                    PrintWriter toClient = new PrintWriter(clientSocket.getOutputStream(), true);
+                    BufferedReader fromClient = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
+            ) {
+                String inLine, outLine;
+                serverProtocol serverProtocol = new serverProtocol();
+                System.out.println("get connection from " + clientSocket.getRemoteSocketAddress().toString());
+                toClient.println("Hello!");
 
-            while ((inLine = in.readLine()) != null) {
-                outLine = serverProtocol.processInput(inLine);
-                out.println(outLine);
-                if (inLine.equals("terminate")){
-                    break;
+                while ((inLine = fromClient.readLine()) != null) {
+                    outLine = serverProtocol.processInput(inLine);
+                    toClient.println(outLine);
+                    System.out.println("get: " + inLine + ", return: " + outLine);
+                    if (inLine.equals("terminate")) {
+                        acceptingConnections = false;
+                    }
                 }
+            } catch (IOException ex) {
+                System.out.println("Exception while listening for connection on port " + port);
+                System.out.println(ex.getMessage());
             }
-        } catch (IOException ex){
-            System.out.println("Exception while listening for connection on port " + port);
-            System.out.println(ex.getMessage());
         }
     }
 }
