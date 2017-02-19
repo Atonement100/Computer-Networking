@@ -26,15 +26,17 @@ public class client {
         String hostname = args[0];
         int port = Integer.parseInt(args[1]);
 
-        try(
+        try(    //Socket initialization
             Socket clientSocket = new Socket(hostname, port);
             PrintWriter toServer = new PrintWriter(clientSocket.getOutputStream(), true);
             BufferedReader fromServer = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
         )
         {
+            //Successfully connected to our server
             BufferedReader stdIn = new BufferedReader(new InputStreamReader(System.in));
             String serverStr, clientStr;
 
+            //Allow user to keep sending input until they receive the terminate code, then shut down.
             while ((serverStr = fromServer.readLine()) != null){
                 if (errorCodes.containsKey(serverStr)){
                     System.out.println("receive: " + errorCodes.get(serverStr));
@@ -53,7 +55,6 @@ public class client {
                     toServer.println(clientStr);
                 }
             }
-
         } catch(UnknownHostException ex) {
             System.err.println("Couldn't find host " + hostname);
             System.exit(1);
