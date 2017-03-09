@@ -1,5 +1,6 @@
+import java.io.Serializable;
 
-public class packet {
+public class packet implements Serializable{
     private byte sequenceNum;
     private byte packetId;
     private int checksum;

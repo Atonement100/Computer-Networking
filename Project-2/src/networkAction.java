@@ -5,7 +5,7 @@ public enum networkAction {
     CORRUPT,
     DROP;
 
-    public networkAction generateNetworkAction(){
+    static public networkAction generateNetworkAction(){
         int randomNum = ThreadLocalRandom.current().nextInt(0, 4); //exclusive of upper
         switch (randomNum){
             case 0:

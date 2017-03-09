@@ -1,7 +1,4 @@
-import java.io.BufferedReader;
-import java.io.IOException;
-import java.io.InputStreamReader;
-import java.io.PrintWriter;
+import java.io.*;
 import java.net.ServerSocket;
 import java.net.Socket;
 
@@ -32,6 +29,8 @@ public class network {
                     Socket receiver = network.accept();
                     PrintWriter toReceiver = new PrintWriter(receiver.getOutputStream(), true);
                     BufferedReader fromReceiver = new BufferedReader(new InputStreamReader(receiver.getInputStream()));
+                    ObjectOutputStream objToReceiver = new ObjectOutputStream(receiver.getOutputStream());
+                    ObjectInputStream objFromReceiver = new ObjectInputStream(receiver.getInputStream());
                 ){
                     toReceiver.println("a");
                     String inLine, outLine;
@@ -52,49 +51,25 @@ public class network {
                     Socket sender = network.accept();
                     PrintWriter toSender = new PrintWriter(sender.getOutputStream(), true);
                     BufferedReader fromSender = new BufferedReader(new InputStreamReader(sender.getInputStream()));
+                    ObjectOutputStream objToSender = new ObjectOutputStream(sender.getOutputStream());
+                    ObjectInputStream objFromSender = new ObjectInputStream(sender.getInputStream());
                 ){
-                    toSender.println("A");
                     String inLine, outLine;
-                    while ((inLine = fromSender.readLine()) != null) {
-                        outLine = inLine;
-                        toSender.println(outLine);
-                        System.out.println("get: " + inLine + ", return: " + outLine);
+                    packet inPacket;
+                    while ((inPacket = (packet) objFromSender.readObject()) != null) {
+                        networkAction action = networkAction.generateNetworkAction();
+                        outLine = "Received: Packet" + inPacket.getSequenceNum() + ", " + inPacket.getPacketId() + ", " + action;
+                        System.out.println(outLine);
                     }
                 } catch (IOException ex){
                     System.out.println("Exception while attempting to make sender connection");
+                } catch (ClassNotFoundException ex){
+                    System.out.println("Invalid class received from sender");
                 }
             }
         };
 
         receiverThread.start();
         senderThread.start();
-
-        System.out.println("threads started");
-
-/*
-        try (
-                //Socket and communication initialization
-                ServerSocket serverSocket = new ServerSocket(port);
-                Socket clientSocket = serverSocket.accept();
-                PrintWriter toClient = new PrintWriter(clientSocket.getOutputStream(), true);
-                BufferedReader fromClient = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
-        ) {
-            //Successfully opened a connection
-            String inLine, outLine;
-            //serverProtocol serverProtocol = new serverProtocol();
-            System.out.println("get connection from " + clientSocket.getRemoteSocketAddress().toString());
-            toClient.println("Hello!");
-
-            //Read input until client disconnects or asks server to terminate
-            while ((inLine = fromClient.readLine()) != null) {
-                outLine = inLine;
-                toClient.println(outLine);
-                System.out.println("get: " + inLine + ", return: " + outLine);
-            }
-        } catch (IOException ex) {
-            System.out.println("Exception while listening for connection on port " + port);
-            System.out.println(ex.getMessage());
-        }
-*/
     }
 }
