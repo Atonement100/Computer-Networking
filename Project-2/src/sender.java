@@ -5,7 +5,10 @@ import java.util.*;
 
 
 public class sender {
+
     public static void main(String[] args) throws IOException {
+        boolean startTermination = false;
+
         if (args.length != 3){
             System.err.println("Usage: java client <hostname> <port #> <message filename>");
             return;
@@ -18,16 +21,10 @@ public class sender {
 
         try(    //Socket initialization
             Socket clientSocket = new Socket(hostname, port);
-            PrintWriter toServer = new PrintWriter(clientSocket.getOutputStream(), true);
-            BufferedReader fromServer = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
             ObjectOutputStream objToServer = new ObjectOutputStream(clientSocket.getOutputStream());
             ObjectInputStream objFromServer = new ObjectInputStream(clientSocket.getInputStream());
         )
         {
-            //Successfully connected to our server
-            BufferedReader stdIn = new BufferedReader(new InputStreamReader(System.in));
-            String serverStr, clientStr;
-
             // " The sender program first reads the message file and converts it into many packets "
             // This requirement is why all packets are made before sending any.
             Vector<packet> outPackets = new Vector<>();
@@ -49,36 +46,60 @@ public class sender {
                     }
                 }
 
-                Boolean alive = true;
-                byte state = 0b000;
-                byte currentPacket = 0;
-                //noinspection ConstantConditions
-                while (alive) {
-                    switch(state){
-                        case 0b00:
-                        case 0b10:
-                            if (currentPacket > outPackets.size()) {System.out.println("All packets sent"); state = 0b100;}
-                            objToServer.writeObject(outPackets.elementAt(currentPacket));
-                            state += 0b01;
-                            break;
-                        case 0b01:
-                        case 0b11:
-                            currentPacket++;
-                            state = (byte)((state + 0b01) % 0b100);
-                            break;
-                        case 0b100:
-                            alive = false;
-                        default:
-                            state = 0b100;
-                    }
-
-                }
             }
             catch(FileNotFoundException ex) {
                 System.out.println("Unable to open file '" + filename + "'");
             }
             catch(IOException ex) {
                 System.out.println("Error reading file '" + filename + "'");
+            }
+
+            Boolean alive = true;
+            byte state = 0b00;
+            byte currentPacket = 0;
+            int totalPacketsSent = 0;
+            //noinspection ConstantConditions
+            while (alive) {
+                switch(state){
+                    case 0b00:
+                    case 0b10:
+                        //if (startTermination) {objToServer.writeObject(-1); clientSocket.close(); System.exit(1);}
+                        if (currentPacket >= outPackets.size() || outPackets.get(currentPacket).getContent().endsWith(".")) {startTermination =  true;}
+                        objToServer.writeObject(outPackets.elementAt(currentPacket));
+                        totalPacketsSent++;
+                        state += 0b01;
+                        break;
+                    case 0b01:
+                    case 0b11:
+                        ack inAck = (ack) objFromServer.readObject();
+                        String ackRec = inAck.getSequenceNum() < 2 ? "ACK" + inAck.getSequenceNum() : "DROP",
+                                actionStr;
+                        if (startTermination) {actionStr = "no more packets to send";}
+                        else if (inAck.getSequenceNum() == 2 || inAck.getSequenceNum() != (state >> 1)) {actionStr = "resend Packet" + (state >> 1);}
+                        else {actionStr = "send Packet" + ((state >> 1) ^ 1);}
+
+                        System.out.println("Waiting ACK" + (state >> 1) + ", " + totalPacketsSent + ", " + ackRec + ", " + actionStr);
+
+                        if((inAck.getSequenceNum() > 2 || inAck.getSequenceNum() != (state >> 1))){ //If the sequence number is not what we are expecting
+                            objToServer.writeObject(outPackets.elementAt(currentPacket)); //rewrite and maintain state
+                            totalPacketsSent++;
+                            break;
+                        }
+
+                        if (startTermination) {
+                            objToServer.writeObject((byte)(-1));
+                            clientSocket.close();
+                            System.exit(1);
+                        }
+
+                        currentPacket++;
+                        state = (byte)((state + 0b01) % 0b100);
+                        break;
+                    case 0b100:
+                        alive = false;
+                    default:
+                        state = 0b100;
+                }
             }
         } catch(UnknownHostException ex) {
             System.err.println("Couldn't find host " + hostname);
@@ -87,6 +108,9 @@ public class sender {
         } catch (IOException ex){
             System.err.println("Couldn't make connection to " + hostname);
             System.exit(1);
+        }
+        catch(ClassNotFoundException ex){
+            System.out.println("Invalid class received from network.");
         }
     }
 }

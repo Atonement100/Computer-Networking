@@ -3,9 +3,10 @@ import java.net.ServerSocket;
 import java.net.Socket;
 
 public class network {
-    static ServerSocket network;
-    static PrintWriter toReceiver, toSender;
-    static BufferedReader fromReceiver, fromSender;
+    private static ServerSocket network;
+    private static packet nextPacket;
+    private static ack nextAck;
+    private static volatile boolean movePacket, moveAck, startTermination = false;
 
     public static void main(String[] args) throws IOException {
         if (args.length != 1){
@@ -27,39 +28,103 @@ public class network {
             public void run(){
                 try (
                     Socket receiver = network.accept();
-                    PrintWriter toReceiver = new PrintWriter(receiver.getOutputStream(), true);
-                    BufferedReader fromReceiver = new BufferedReader(new InputStreamReader(receiver.getInputStream()));
                     ObjectOutputStream objToReceiver = new ObjectOutputStream(receiver.getOutputStream());
                     ObjectInputStream objFromReceiver = new ObjectInputStream(receiver.getInputStream());
                 ){
-                    toReceiver.println("a");
-                    String inLine, outLine;
-                    while ((inLine = fromReceiver.readLine()) != null) {
-                        outLine = inLine;
-                        toReceiver.println(outLine);
-                        System.out.println("get: " + inLine + ", return: " + outLine);
+                    //first communication with receiver
+                    while (!movePacket);
+                    objToReceiver.writeObject(nextPacket);
+
+                    Object inObj;
+                    ack inAck;
+                    while ((inObj = objFromReceiver.readObject()) != null) {
+                        if (inObj instanceof ack) {
+                            inAck = (ack) inObj;
+                            networkAction action = networkAction.generateNetworkAction();
+                            String outLine = "Received: ACK" + inAck.getSequenceNum() + ", " + action;
+                            System.out.println(outLine);
+                            switch (action) {
+                                case CORRUPT:
+                                    inAck.corruptAck(); //fallthrough
+                                case PASS:
+                                    nextAck = inAck;
+                                    moveAck = true;
+                                    movePacket = false;
+                                    break;
+                                case DROP:
+                                    nextAck = new ack((byte) 2);
+                                    moveAck = true;
+                                    movePacket = false;
+                                    break;
+                                default:
+                                    throw new IllegalStateException();
+                            }
+
+                            while (!(movePacket || startTermination)) ;
+                            if (startTermination) {
+                                objToReceiver.writeObject((byte)(-1));
+                                receiver.close();
+                                return;
+                            }
+                            else if (movePacket) {objToReceiver.writeObject(nextPacket);}
+
+                        }
                     }
                 } catch (IOException ex){
                     System.out.println("Exception while attempting to make receiver connection");
+                } catch (ClassNotFoundException ex){
+                        System.out.println("Invalid class received from receiver");
                 }
             }
         };
+
+        receiverThread.start();
 
         Thread senderThread = new Thread(){
             public void run(){
                 try (
                     Socket sender = network.accept();
-                    PrintWriter toSender = new PrintWriter(sender.getOutputStream(), true);
-                    BufferedReader fromSender = new BufferedReader(new InputStreamReader(sender.getInputStream()));
                     ObjectOutputStream objToSender = new ObjectOutputStream(sender.getOutputStream());
                     ObjectInputStream objFromSender = new ObjectInputStream(sender.getInputStream());
                 ){
-                    String inLine, outLine;
+                    String outLine;
+                    Object inObj;
                     packet inPacket;
-                    while ((inPacket = (packet) objFromSender.readObject()) != null) {
-                        networkAction action = networkAction.generateNetworkAction();
-                        outLine = "Received: Packet" + inPacket.getSequenceNum() + ", " + inPacket.getPacketId() + ", " + action;
-                        System.out.println(outLine);
+                    while ((inObj = objFromSender.readObject()) != null) {
+                        if (inObj instanceof packet) {
+                            inPacket = (packet) inObj;
+                            networkAction action = networkAction.generateNetworkAction();
+                            outLine = "Received: Packet" + inPacket.getSequenceNum() + ", " + inPacket.getPacketId() + ", " + action;
+                            System.out.println(outLine);
+                            switch (action) {
+                                case CORRUPT:
+                                    inPacket.corruptPacket(); //fallthrough
+                                case PASS:
+                                    nextPacket = inPacket;
+                                    movePacket = true;
+                                    moveAck = false;
+                                    break;
+                                case DROP:
+                                    nextAck = new ack((byte) 2);
+                                    moveAck = true;
+                                    movePacket = false;
+                                    break;
+                                default:
+                                    throw new IllegalStateException();
+                            }
+
+                            while (!moveAck) ;
+                            moveAck = false;
+                            objToSender.writeObject(nextAck);
+                        }
+                        else if (inObj instanceof Byte){
+                            byte inByte = (Byte) inObj;
+                            if (inByte == -1){
+                                startTermination = true;
+                                sender.close();
+                                return;
+                            }
+                        }
                     }
                 } catch (IOException ex){
                     System.out.println("Exception while attempting to make sender connection");
@@ -69,7 +134,6 @@ public class network {
             }
         };
 
-        receiverThread.start();
         senderThread.start();
     }
 }

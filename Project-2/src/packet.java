@@ -28,4 +28,8 @@ public class packet implements Serializable{
     public String getContent(){
         return this.content;
     }
+
+    public void corruptPacket(){
+        this.checksum++;
+    }
 }
