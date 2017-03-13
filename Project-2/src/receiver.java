@@ -15,19 +15,17 @@ public class receiver {
 
         try(    //Socket initialization
             Socket clientSocket = new Socket(hostname, port);
-            PrintWriter toServer = new PrintWriter(clientSocket.getOutputStream(), true);
-            BufferedReader fromServer = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
             ObjectOutputStream objToServer = new ObjectOutputStream(clientSocket.getOutputStream());
             ObjectInputStream objFromServer = new ObjectInputStream(clientSocket.getInputStream());
         )
         {
             packet inPacket;
             Vector<String> messageTokens = new Vector<>();
-            byte expectedSequenceNum = 0b0;
+            byte expectedSequenceNum = 0b0, waitingSequenceNum = 0b0;
             byte ackNumToReturn = 0b0;
             int totalPacketsReceived = 0;
             Object inObj;
-            while ((inObj = objFromServer.readObject()) != null){
+            while ((inObj = objFromServer.readUnshared()) != null){
                 if (inObj instanceof packet) {
                     inPacket = (packet) inObj;
                     totalPacketsReceived++;
@@ -37,22 +35,36 @@ public class receiver {
                         localChecksum += ch;
                     }
 
-                    if (localChecksum == inPacket.getChecksum()) {
-                        if (expectedSequenceNum == inPacket.getSequenceNum()) {
+                    if (expectedSequenceNum == inPacket.getSequenceNum()) {
+                        if (localChecksum == inPacket.getChecksum()){
                             messageTokens.add(inPacket.getContent());
                             ackNumToReturn = expectedSequenceNum;
+                            waitingSequenceNum = expectedSequenceNum;
                             expectedSequenceNum = (byte) (expectedSequenceNum ^ 0b1);
-                        } else if (inPacket.getContent().equals(messageTokens.lastElement())) {
-                            ackNumToReturn = (byte) (expectedSequenceNum ^ 0b1);
+                            //System.out.println("Good seq num good checksum. ack num ret: " + ackNumToReturn + ". exp seq num: " + expectedSequenceNum);
                         }
-                    } else {
-                        ackNumToReturn = (byte) (expectedSequenceNum ^ 0b1);
+                        else {
+                            ackNumToReturn = (byte) (expectedSequenceNum ^ 0b1);
+                            waitingSequenceNum = expectedSequenceNum;
+                            //System.out.println("Good seq num BAD checksum. ack num ret: " + ackNumToReturn + ". exp seq num: " + expectedSequenceNum);
+                        }
+                    }
+                    else if (inPacket.getContent().equals(messageTokens.lastElement())){
+                        if (localChecksum == inPacket.getChecksum()){
+                            ackNumToReturn = (byte) (expectedSequenceNum ^ 0b1);
+                            waitingSequenceNum = expectedSequenceNum;
+                            //System.out.println("bad seq num good checksum. ack num ret: " + ackNumToReturn + ". exp seq num: " + expectedSequenceNum);
+                        }
+                        else {
+                            ackNumToReturn = expectedSequenceNum;
+                            waitingSequenceNum = (byte)(expectedSequenceNum ^ 0b1);
+                            //System.out.println("bad seq num bad checksum. ack num ret: " + ackNumToReturn + ". exp seq num: " + expectedSequenceNum);
+                        }
                     }
 
-                    System.out.println("Waiting " + (expectedSequenceNum^0b1) + ", " + totalPacketsReceived + ", " +
+                    System.out.println("Waiting " + waitingSequenceNum + ", " + totalPacketsReceived + ", " +
                             inPacket.getSequenceNum() + " " + inPacket.getPacketId() + " " + inPacket.getChecksum() + " " + inPacket.getContent() + ", " + "ACK" + ackNumToReturn);
-
-                    objToServer.writeObject(new ack(ackNumToReturn));
+                    objToServer.writeUnshared(new ack(ackNumToReturn));
                 }
                 else if (inObj instanceof Byte){
                     if ((byte) inObj == -1){

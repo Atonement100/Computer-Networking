@@ -32,4 +32,12 @@ public class packet implements Serializable{
     public void corruptPacket(){
         this.checksum++;
     }
+
+    public void recalculateChecksum(){ //for use by sender only :x
+        int checksum = 0;
+        for (char ch : this.getContent().toCharArray()) {
+            checksum += ch;
+        }
+        this.checksum = checksum;
+    }
 }

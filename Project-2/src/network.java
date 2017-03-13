@@ -4,8 +4,8 @@ import java.net.Socket;
 
 public class network {
     private static ServerSocket network;
-    private static packet nextPacket;
-    private static ack nextAck;
+    private static volatile packet nextPacket;
+    private static volatile ack nextAck;
     private static volatile boolean movePacket, moveAck, startTermination = false;
 
     public static void main(String[] args) throws IOException {
@@ -33,11 +33,11 @@ public class network {
                 ){
                     //first communication with receiver
                     while (!movePacket);
-                    objToReceiver.writeObject(nextPacket);
+                    objToReceiver.writeUnshared(nextPacket);
 
                     Object inObj;
                     ack inAck;
-                    while ((inObj = objFromReceiver.readObject()) != null) {
+                    while ((inObj = objFromReceiver.readUnshared()) != null) {
                         if (inObj instanceof ack) {
                             inAck = (ack) inObj;
                             networkAction action = networkAction.generateNetworkAction();
@@ -62,11 +62,14 @@ public class network {
 
                             while (!(movePacket || startTermination)) ;
                             if (startTermination) {
-                                objToReceiver.writeObject((byte)(-1));
+                                objToReceiver.writeUnshared((byte)(-1));
                                 receiver.close();
                                 return;
                             }
-                            else if (movePacket) {objToReceiver.writeObject(nextPacket);}
+                            else if (movePacket) {
+                                objToReceiver.writeUnshared(nextPacket);
+                                nextPacket = null;
+                            }
 
                         }
                     }
@@ -90,7 +93,7 @@ public class network {
                     String outLine;
                     Object inObj;
                     packet inPacket;
-                    while ((inObj = objFromSender.readObject()) != null) {
+                    while ((inObj = objFromSender.readUnshared()) != null) {
                         if (inObj instanceof packet) {
                             inPacket = (packet) inObj;
                             networkAction action = networkAction.generateNetworkAction();
@@ -115,7 +118,8 @@ public class network {
 
                             while (!moveAck) ;
                             moveAck = false;
-                            objToSender.writeObject(nextAck);
+                            objToSender.writeUnshared(nextAck);
+                            nextAck = null;
                         }
                         else if (inObj instanceof Byte){
                             byte inByte = (Byte) inObj;

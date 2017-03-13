@@ -58,36 +58,37 @@ public class sender {
             byte state = 0b00;
             byte currentPacket = 0;
             int totalPacketsSent = 0;
-            //noinspection ConstantConditions
             while (alive) {
                 switch(state){
                     case 0b00:
                     case 0b10:
-                        //if (startTermination) {objToServer.writeObject(-1); clientSocket.close(); System.exit(1);}
                         if (currentPacket >= outPackets.size() || outPackets.get(currentPacket).getContent().endsWith(".")) {startTermination =  true;}
-                        objToServer.writeObject(outPackets.elementAt(currentPacket));
+                        objToServer.writeUnshared(outPackets.elementAt(currentPacket));
                         totalPacketsSent++;
                         state += 0b01;
                         break;
                     case 0b01:
                     case 0b11:
                         ack inAck = (ack) objFromServer.readObject();
+
+                        boolean resendPacket = inAck.getSequenceNum() == 2 || (inAck.getSequenceNum() != (state >> 1) && inAck.getChecksum() == 0);
                         String ackRec = inAck.getSequenceNum() < 2 ? "ACK" + inAck.getSequenceNum() : "DROP",
                                 actionStr;
                         if (startTermination) {actionStr = "no more packets to send";}
-                        else if (inAck.getSequenceNum() == 2 || inAck.getSequenceNum() != (state >> 1)) {actionStr = "resend Packet" + (state >> 1);}
+                        else if (resendPacket) {actionStr = "resend Packet" + (state >> 1);}
                         else {actionStr = "send Packet" + ((state >> 1) ^ 1);}
 
                         System.out.println("Waiting ACK" + (state >> 1) + ", " + totalPacketsSent + ", " + ackRec + ", " + actionStr);
 
-                        if((inAck.getSequenceNum() > 2 || inAck.getSequenceNum() != (state >> 1))){ //If the sequence number is not what we are expecting
-                            objToServer.writeObject(outPackets.elementAt(currentPacket)); //rewrite and maintain state
+                        if(resendPacket){ //If the sequence number is not what we are expecting
+                            outPackets.elementAt(currentPacket).recalculateChecksum();
+                            objToServer.writeUnshared(outPackets.elementAt(currentPacket)); //rewrite and maintain state
                             totalPacketsSent++;
                             break;
                         }
 
                         if (startTermination) {
-                            objToServer.writeObject((byte)(-1));
+                            objToServer.writeUnshared((byte)(-1));
                             clientSocket.close();
                             System.exit(1);
                         }
@@ -106,7 +107,7 @@ public class sender {
             System.exit(1);
 
         } catch (IOException ex){
-            System.err.println("Couldn't make connection to " + hostname);
+            System.err.println("IOException occurred");
             System.exit(1);
         }
         catch(ClassNotFoundException ex){
