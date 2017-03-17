@@ -6,7 +6,7 @@ public class network {
     private static ServerSocket network;
     private static volatile packet nextPacket;
     private static volatile ack nextAck;
-    private static volatile boolean movePacket, moveAck, startTermination = false;
+    private static volatile boolean movePacket, moveAck, startTermination = false, receiverConnected = false;
 
     public static void main(String[] args) throws IOException {
         if (args.length != 1){
@@ -32,6 +32,7 @@ public class network {
                     ObjectInputStream objFromReceiver = new ObjectInputStream(receiver.getInputStream());
                 ){
                     //first communication with receiver
+					receiverConnected = true;
                     while (!movePacket);
                     objToReceiver.writeUnshared(nextPacket);
 
@@ -82,6 +83,8 @@ public class network {
         };
 
         receiverThread.start();
+		
+		while(!receiverConnected){};
 
         Thread senderThread = new Thread(){
             public void run(){

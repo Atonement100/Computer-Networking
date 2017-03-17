@@ -71,7 +71,7 @@ public class sender {
                     case 0b11:
                         ack inAck = (ack) objFromServer.readObject();
 
-                        boolean resendPacket = inAck.getSequenceNum() == 2 || (inAck.getSequenceNum() != (state >> 1) && inAck.getChecksum() == 0);
+                        boolean resendPacket = inAck.getSequenceNum() == 2 || inAck.getSequenceNum() != (state >> 1) || inAck.getChecksum() != 0;
                         String ackRec = inAck.getSequenceNum() < 2 ? "ACK" + inAck.getSequenceNum() : "DROP",
                                 actionStr;
                         if (startTermination) {actionStr = "no more packets to send";}
